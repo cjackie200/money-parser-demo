@@ -16,6 +16,14 @@ String okBody() => jsonEncode({
       'errors': <String>[],
     });
 
+/// 单条目 200 响应体。
+String oneBody() => jsonEncode({
+      'entries': [
+        {'amount': 100.0, 'category': '购物', 'direction': 'expense'},
+      ],
+      'errors': <String>[],
+    });
+
 /// bytes + utf8 构造响应,避免中文 body 触发 latin1 编码错误。
 http.Response jsonResponse(String body, int status) => http.Response.bytes(
       utf8.encode(body),
@@ -50,12 +58,12 @@ void main() {
     expect(find.byType(ListView), findsNothing);
   });
 
-  testWidgets('200 成功: 列表被 entries 替换', (WidgetTester tester) async {
+  testWidgets('200 成功: 首次解析列表填充', (WidgetTester tester) async {
     await pumpApp(tester, apiWith(MockClient((_) async => jsonResponse(okBody(), 200))));
 
     await tester.tap(find.text('解析'));
-    await tester.pump(); // 进入 loading
-    await tester.pump(); // 响应完成
+    await tester.pump();
+    await tester.pump();
 
     expect(find.text('点击解析查看结果'), findsNothing);
     expect(find.text('餐饮'), findsOneWidget);
@@ -63,6 +71,33 @@ void main() {
     expect(find.text('交通'), findsOneWidget);
     expect(find.text('¥22.5'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  testWidgets('累计: 第二次解析追加而不是替换', (WidgetTester tester) async {
+    var calls = 0;
+    final client = MockClient((_) async {
+      calls++;
+      return jsonResponse(calls == 1 ? okBody() : oneBody(), 200);
+    });
+    await pumpApp(tester, apiWith(client));
+
+    // 第一次: 2 条
+    await tester.tap(find.text('解析'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('餐饮'), findsOneWidget);
+    expect(find.text('交通'), findsOneWidget);
+
+    // 第二次: 追加 1 条,共 3 条
+    await tester.tap(find.text('解析'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('餐饮'), findsOneWidget);
+    expect(find.text('¥35.0'), findsOneWidget);
+    expect(find.text('交通'), findsOneWidget);
+    expect(find.text('¥22.5'), findsOneWidget);
+    expect(find.text('购物'), findsOneWidget);
+    expect(find.text('¥100.0'), findsOneWidget);
   });
 
   testWidgets('加载中: 按钮禁用且显示进度圈', (WidgetTester tester) async {
@@ -75,7 +110,7 @@ void main() {
     final button = tester.widget<FilledButton>(find.byType(FilledButton));
     expect(button.onPressed, isNull);
 
-    await tester.pump(const Duration(seconds: 2)); // 请求完成
+    await tester.pump(const Duration(seconds: 2));
     await tester.pump();
     expect(find.text('餐饮'), findsOneWidget);
   });
@@ -91,7 +126,7 @@ void main() {
 
     await tester.tap(find.byType(FilledButton));
     await tester.pump(const Duration(milliseconds: 100));
-    await tester.tap(find.byType(FilledButton)); // 已禁用
+    await tester.tap(find.byType(FilledButton));
     await tester.pump(const Duration(seconds: 2));
     await tester.pump();
 
@@ -108,7 +143,6 @@ void main() {
     });
     await pumpApp(tester, apiWith(client));
 
-    // 两次 tap 之间不 pump,两次都命中旧 onPressed 闭包
     await tester.tap(find.byType(FilledButton));
     await tester.tap(find.byType(FilledButton));
     await tester.pump(const Duration(seconds: 2));
@@ -151,12 +185,40 @@ void main() {
     expect(find.text('手动添加'), findsOneWidget);
   });
 
-  testWidgets('手动添加: SnackBar 敬请期待', (WidgetTester tester) async {
+  testWidgets('手动添加: 表单提交后条目进列表', (WidgetTester tester) async {
     await pumpApp(tester, apiWith(MockClient((_) async => jsonResponse(okBody(), 200))));
 
     await tester.tap(find.text('手动添加'));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
-    expect(find.text('敬请期待'), findsOneWidget);
+    // 底部表单出现
+    expect(find.text('金额'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).last, '12.5');
+    // 选分类: 打开下拉,选「交通」
+    await tester.tap(find.text('餐饮').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('交通').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('确认'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('交通'), findsOneWidget);
+    expect(find.text('¥12.5'), findsOneWidget);
+  });
+
+  testWidgets('手动添加: 金额无效时提示且表单不关闭', (WidgetTester tester) async {
+    await pumpApp(tester, apiWith(MockClient((_) async => jsonResponse(okBody(), 200))));
+
+    await tester.tap(find.text('手动添加'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField).last, 'abc');
+    await tester.tap(find.text('确认'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('金额无效'), findsOneWidget);
+    expect(find.text('确认'), findsOneWidget); // 表单仍在
   });
 }

@@ -1,2 +1,5 @@
 # Vim 交换文件
 *.swp
+
+# macOS Finder 产物
+.DS_Store

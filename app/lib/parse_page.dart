@@ -16,7 +16,7 @@ class ParsePage extends StatefulWidget {
 class _ParsePageState extends State<ParsePage> {
   final TextEditingController _controller = TextEditingController();
 
-  /// 解析结果,初始为空。
+  /// 记账列表,解析结果与手动添加的条目都累计在这里。
   List<Entry> _entries = const [];
 
   /// 请求进行中,用于防重复点击。
@@ -28,7 +28,7 @@ class _ParsePageState extends State<ParsePage> {
     super.dispose();
   }
 
-  /// 调用后端解析。防重复、失败红色 SnackBar、手动入口不受影响。
+  /// 调用后端解析,成功时**追加**到列表,不覆盖已有条目。
   Future<void> _handleParse() async {
     if (_loading) return; // 同帧双击兜底(onPressed 禁用要等下一帧才生效)
 
@@ -36,7 +36,7 @@ class _ParsePageState extends State<ParsePage> {
     try {
       final entries = await widget.api.parse(_controller.text);
       if (!mounted) return;
-      setState(() => _entries = entries);
+      setState(() => _entries = [..._entries, ...entries]);
     } catch (e) {
       if (!mounted) return;
       final message = e is ParseException ? e.message : '解析失败，请稍后重试';
@@ -48,11 +48,16 @@ class _ParsePageState extends State<ParsePage> {
     }
   }
 
-  /// 备用入口,当前仅占位提示。
-  void _handleManualAdd() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('敬请期待')),
+  /// 手动添加: 弹出底部表单,确认后条目追加到列表(纯本地,不调服务端)。
+  Future<void> _handleManualAdd() async {
+    final entry = await showModalBottomSheet<Entry>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => const _ManualAddSheet(),
     );
+    if (entry != null && mounted) {
+      setState(() => _entries = [..._entries, entry]);
+    }
   }
 
   /// 失败提示: 红底,弹前清掉旧条避免堆叠。
@@ -123,6 +128,97 @@ class _ParsePageState extends State<ParsePage> {
                     ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 手动添加底部表单: 金额 + 分类 + 方向。
+class _ManualAddSheet extends StatefulWidget {
+  const _ManualAddSheet();
+
+  @override
+  State<_ManualAddSheet> createState() => _ManualAddSheetState();
+}
+
+class _ManualAddSheetState extends State<_ManualAddSheet> {
+  final TextEditingController _amountController = TextEditingController();
+
+  String _category = kCategories.first;
+  bool _isExpense = true;
+  String? _error;
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  /// 校验金额并提交,合法则关闭表单返回 Entry。
+  void _submit() {
+    final amount = double.tryParse(_amountController.text.trim());
+    if (amount == null || amount <= 0) {
+      setState(() => _error = '金额无效，请输入大于 0 的数字');
+      return;
+    }
+    Navigator.of(context).pop(Entry(
+      amount: amount,
+      category: _category,
+      direction: _isExpense ? 'expense' : 'income',
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      // 键盘弹出时表单上移
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('手动添加',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _amountController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: '金额',
+                  errorText: _error,
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _category,
+                decoration: const InputDecoration(
+                  labelText: '分类',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  for (final c in kCategories)
+                    DropdownMenuItem(value: c, child: Text(c)),
+                ],
+                onChanged: (v) => setState(() => _category = v ?? _category),
+              ),
+              const SizedBox(height: 12),
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: true, label: Text('支出')),
+                  ButtonSegment(value: false, label: Text('收入')),
+                ],
+                selected: {_isExpense},
+                onSelectionChanged: (s) => setState(() => _isExpense = s.first),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(onPressed: _submit, child: const Text('确认')),
+            ],
+          ),
         ),
       ),
     );

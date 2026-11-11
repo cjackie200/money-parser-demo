@@ -1,3 +1,6 @@
+/// 固定分类表,与服务端 system prompt 一致。
+const List<String> kCategories = ['餐饮', '购物', '交通', '居住', '娱乐', '医疗', '教育', '其他'];
+
 /// 记账条目模型,字段与 docs/api_contract.md 的服务端契约一致。
 class Entry {
   /// 金额

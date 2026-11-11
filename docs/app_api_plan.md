@@ -66,7 +66,7 @@ class _ParsePageState ... {
 ## 行为流程
 
 - **点击**:`_loading=true` → 按钮 `onPressed=null` + 按钮内 CircularProgressIndicator(双保险防重复)
-- **200**:`utf8.decode(bodyBytes)` → `jsonDecode` → 取 `entries` → 替换 ListView;空数组显示空态
+- **200**:`utf8.decode(bodyBytes)` → `jsonDecode` → 取 `entries` → **追加到列表末尾(累计,不覆盖)**;空数组显示空态
 - **4xx/5xx**:红底 SnackBar,优先后端 `errors[0]`,否则 `解析失败 (HTTP xxx)`
 - **超时/SocketException/ClientException**:红底 SnackBar「连接超时,请检查服务是否启动」
 - **兜底**:`ParseApi` 裸 catch 包装一切异常(含 TypeError);页面 catch 后 `mounted` 检查再 setState/弹条,`finally` 复位 loading
@@ -108,3 +108,11 @@ class _ParsePageState ... {
 - 200 且 entries 为空:显示空态,errors 内容本轮不展示
 - 错误文案:优先后端 errors[0];超时/网络统一「连接超时,请检查服务是否启动」;未知兜底「解析失败,请稍后重试」
 - 保留 openai-go 默认重试(服务端),客户端 10s 超时覆盖最坏情况
+
+## 修订记录(2026-11-11,真机验收反馈)
+
+- 解析结果从「替换列表」改为「**累计追加**」:每次成功解析的 entries 追加到列表末尾
+- 「手动添加」从占位按钮改为可用功能:底部表单(金额 + 8 项固定分类下拉 + 支出/收入切换),金额非法时表单内提示且不关闭,确认后条目追加到列表(**纯本地,不调服务端**)
+- 固定分类表 `kCategories` 定义在 `lib/entry.dart`,与服务端 prompt 一致
+- 测试更新为 18 个(widget 10 + parse_api 8),含「两次解析累计」「表单提交进列表」「金额无效提示」用例
+- 真机验收截图见 `docs/acceptance/`
