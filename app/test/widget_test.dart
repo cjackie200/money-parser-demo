@@ -88,7 +88,7 @@ void main() {
     expect(find.text('餐饮'), findsOneWidget);
     expect(find.text('交通'), findsOneWidget);
 
-    // 第二次: 追加 1 条,共 3 条
+    // 第二次: 追加 1 条,共 3 条,新条目排在最上面
     await tester.tap(find.text('解析'));
     await tester.pump();
     await tester.pump();
@@ -98,6 +98,12 @@ void main() {
     expect(find.text('¥22.5'), findsOneWidget);
     expect(find.text('购物'), findsOneWidget);
     expect(find.text('¥100.0'), findsOneWidget);
+
+    final tiles = tester.widgetList<ListTile>(find.byType(ListTile)).toList();
+    expect(tiles, hasLength(3));
+    expect((tiles[0].title as Text).data, '购物'); // 最新的在最上
+    expect((tiles[1].title as Text).data, '餐饮');
+    expect((tiles[2].title as Text).data, '交通');
   });
 
   testWidgets('加载中: 按钮禁用且显示进度圈', (WidgetTester tester) async {
@@ -206,6 +212,9 @@ void main() {
 
     expect(find.text('交通'), findsOneWidget);
     expect(find.text('¥12.5'), findsOneWidget);
+    // 手动添加的条目也在列表顶部
+    final firstTile = tester.widget<ListTile>(find.byType(ListTile).first);
+    expect((firstTile.title as Text).data, '交通');
   });
 
   testWidgets('手动添加: 金额无效时提示且表单不关闭', (WidgetTester tester) async {

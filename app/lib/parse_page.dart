@@ -28,7 +28,7 @@ class _ParsePageState extends State<ParsePage> {
     super.dispose();
   }
 
-  /// 调用后端解析,成功时**追加**到列表,不覆盖已有条目。
+  /// 调用后端解析,成功时新条目**插到列表顶部**,不覆盖已有条目。
   Future<void> _handleParse() async {
     if (_loading) return; // 同帧双击兜底(onPressed 禁用要等下一帧才生效)
 
@@ -36,7 +36,7 @@ class _ParsePageState extends State<ParsePage> {
     try {
       final entries = await widget.api.parse(_controller.text);
       if (!mounted) return;
-      setState(() => _entries = [..._entries, ...entries]);
+      setState(() => _entries = [...entries, ..._entries]);
     } catch (e) {
       if (!mounted) return;
       final message = e is ParseException ? e.message : '解析失败，请稍后重试';
@@ -56,7 +56,8 @@ class _ParsePageState extends State<ParsePage> {
       builder: (context) => const _ManualAddSheet(),
     );
     if (entry != null && mounted) {
-      setState(() => _entries = [..._entries, entry]);
+      // 新增条目插到列表顶部
+      setState(() => _entries = [entry, ..._entries]);
     }
   }
 
